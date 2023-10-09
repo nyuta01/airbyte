@@ -1,0 +1,21 @@
+documentationUrl: https://docsurl.com
+connectionSpecification:
+  $schema: http://json-schema.org/draft-07/schema#
+  title: Kintone Spec
+  type: object
+  required:
+    - subdomain
+    - api_token
+    - app_ids
+  properties:
+    subdomain:
+      type: string
+      description: describe me
+    api_token:
+      type: string
+      description: describe me
+    app_ids:
+      type: array
+      items:
+        type: string
+      description: describe me

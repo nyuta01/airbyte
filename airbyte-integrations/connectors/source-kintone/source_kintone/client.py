@@ -81,16 +81,28 @@ class Client:
         return {x: fields[x] for x in fields if x not in without_fields}
 
     # ref. https://kintone.dev/en/docs/kintone/rest-api/records/add-cursor/
-    def create_cursor(self, app_id: str):
+    def create_cursor(self, app_id: str, till: str = None):
         params = {
             "app": app_id,
-            # "query": "order by $id asc",
-            # "fields": ["$id"],
             "size": 500,
         }
+        # https://cybozu.dev/ja/kintone/docs/overview/query/
+        if till:
+            params["query"] = f"updated_at > \"{till}\""
         url = self._get_base_url() + "/k/v1/records/cursor.json"
         return self._post_data(url, params)
 
+    def get_app_records(self, app_id: str, till: str = None):
+        cursor = self.create_cursor(app_id, till)
+        while True:
+            records, next = self.get_records_by_cursor(cursor["id"])
+            for record in records:
+                yield record
+            if next == False:
+                self.delete_cursor(cursor["id"])
+                break
+            
+        
     # ref. https://kintone.dev/en/docs/kintone/rest-api/records/get-cursor/
     def get_records_by_cursor(self, cursor_id: str):
         params = {
@@ -134,7 +146,13 @@ class Client:
             # https://kintone.dev/en/docs/kintone/overview/field-types/
             json_schema["properties"][k] = {"type": "string"}
 
-        return AirbyteStream(name=app["code"], json_schema=json_schema, supported_sync_modes=["full_refresh"])
+        return AirbyteStream(
+            name=app["code"],
+            json_schema=json_schema,
+            supported_sync_modes=["full_refresh", "incremental"],
+            source_defined_primary_key=[["record_no"]],
+            default_cursor_field=["updated_at"],
+        )
 
 def update_url(url, params):
     url_parts = urllib.parse.urlparse(url)

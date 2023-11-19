@@ -12,10 +12,12 @@ from airbyte_cdk.models import (
     AirbyteCatalog,
     AirbyteConnectionStatus,
     AirbyteMessage,
+    AirbyteStateMessage,
     AirbyteRecordMessage,
     ConfiguredAirbyteCatalog,
     Status,
     Type,
+    SyncMode,
 )
 from airbyte_cdk.sources import Source
 from .client import Client
@@ -90,29 +92,61 @@ class SourceKintone(Source):
 
         :return: A generator that produces a stream of AirbyteRecordMessage contained in AirbyteMessage object.
         """
+        logger.info(f"state: {state}")
+
         client = Client(config, logger)
-        apps = []
+        apps = {}
         for app_id in config.get("app_ids"):
-            apps.append(client.get_app(app_id))
+            app = client.get_app(app_id)
+            apps[app["code"]] = app
 
-        selected_streams = [configured_stream.stream.name for configured_stream in catalog.streams]
-        selected_apps = [app for app in apps if app.get("code") in selected_streams]
+        for stream in catalog.streams:
+            stream_name = stream.stream.name
+            app = apps.get(stream_name)
+            if not app:
+                logger.info(f"stream '{stream_name}' app code is not found")
+                continue
 
-        for app in selected_apps:
-            cursor = client.create_cursor(app["appId"])
-            while True:
-                records, next = client.get_records_by_cursor(cursor["id"])
-                for record in records:
-                    now = int(datetime.now().timestamp()) * 1000
-                    yield AirbyteMessage(
-                        type=Type.RECORD,
-                        record=AirbyteRecordMessage(
-                            stream=app["code"],
-                            data=record,
-                            emitted_at=now
-                        ))
-                if next == False:
-                    client.delete_cursor(cursor["id"])
-                    break
+            if stream.sync_mode == SyncMode.full_refresh:
+                logger.info(
+                    f"syncing stream '{stream_name}' with full_refresh")
+
+            elif stream.sync_mode == SyncMode.incremental:
+                logger.info(f"syncing stream '{stream_name}' with incremental")
+                if stream_name not in state:
+                    state[stream_name] = {}
+
+                cursor_field = stream.cursor_field[0]
+                cursor_value = state[stream_name].get(cursor_field, None)
+                
+
+            else:
+                logger.error(
+                    f"could not sync stream '{stream.stream.name}', invalid sync_mode: {stream.sync_mode}")
+
+            records = client.get_app_records(app["appId"], cursor_value)
+            for record in records:
+                cursor_value = record.get(cursor_field, cursor_value)
+                yield AirbyteMessage(
+                    type=Type.RECORD,
+                    record=AirbyteRecordMessage(
+                        stream=app["code"],
+                        data=record,
+                        emitted_at=self._find_emitted_at(),
+                    ))
+            state[stream_name][cursor_field] = cursor_value
+
+        yield AirbyteMessage(
+            type=Type.STATE,
+            state=AirbyteStateMessage(
+                data=state,
+                emitted_at=self._find_emitted_at(),
+            ),
+        )
 
         logger.info(f"Finished syncing {self.__class__.__name__}")
+
+    def _find_emitted_at(self) -> int:
+        # Returns now, in microseconds. This is a seperate function, so that it is easy
+        # to replace in unit tests.
+        return int(datetime.now().timestamp()) * 1000

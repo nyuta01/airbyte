@@ -1,0 +1,21 @@
+data:
+  registries:
+    oss:
+      enabled: false
+    cloud:
+      enabled: false
+  connectorSubtype: api
+  connectorType: source
+  definitionId: bb58eb92-046e-4e27-8261-fe72524804fa
+  dockerImageTag: 0.1.0
+  dockerRepository: airbyte/source-kintone
+  githubIssueLabel: source-kintone
+  icon: icon.png
+  license: MIT
+  name: Kintone
+  supportLevel: community
+  releaseStage: alpha
+  documentationUrl: https://docs.airbyte.com/integrations/sources/kintone
+  tags:
+    - language:python
+metadataSpecVersion: "1.0"

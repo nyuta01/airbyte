@@ -1,7 +1,4 @@
 data:
-  allowedHosts:
-    hosts:
-      - TODO # Please change to the hostname of the source.
   registries:
     oss:
       enabled: false
@@ -13,10 +10,9 @@ data:
   dockerImageTag: 0.1.0
   dockerRepository: airbyte/source-kintone
   githubIssueLabel: source-kintone
-  icon: kintone.svg
+  icon: icon.png
   license: MIT
   name: Kintone
-  releaseDate: TODO
   supportLevel: community
   releaseStage: alpha
   documentationUrl: https://docs.airbyte.com/integrations/sources/kintone

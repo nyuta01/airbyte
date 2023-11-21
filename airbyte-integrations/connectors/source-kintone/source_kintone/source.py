@@ -36,12 +36,17 @@ class SourceKintone(Source):
 
         :return: AirbyteConnectionStatus indicating a Success or Failure
         """
-        try:
-            # Not Implemented
+        client = Client(config, logger)
+        for app_id in config.get("app_ids"):
+            app = client.get_app(app_id)
+            if not app.get('code'):
+                return AirbyteConnectionStatus(
+                    status=Status.FAILED,
+                    message=f"App code is not found of app_id={app_id}.\n"
+                    f"https://jp.cybozu.help/k/en/user/app_settings/app_othersettings/appcode.html"
+                )
 
-            return AirbyteConnectionStatus(status=Status.SUCCEEDED)
-        except Exception as e:
-            return AirbyteConnectionStatus(status=Status.FAILED, message=f"An exception occurred: {str(e)}")
+        return AirbyteConnectionStatus(status=Status.SUCCEEDED)
 
     def discover(self, logger: AirbyteLogger, config: json) -> AirbyteCatalog:
         """
@@ -100,31 +105,31 @@ class SourceKintone(Source):
             app = client.get_app(app_id)
             apps[app["code"]] = app
 
-        for stream in catalog.streams:
-            stream_name = stream.stream.name
+        cursor_field, cursor_value = None, None
+        for configured_stream in catalog.streams:
+            stream_name = configured_stream.stream.name
             app = apps.get(stream_name)
             if not app:
                 logger.info(f"stream '{stream_name}' app code is not found")
                 continue
 
-            if stream.sync_mode == SyncMode.full_refresh:
+            if configured_stream.sync_mode == SyncMode.full_refresh:
                 logger.info(
                     f"syncing stream '{stream_name}' with full_refresh")
 
-            elif stream.sync_mode == SyncMode.incremental:
+            elif configured_stream.sync_mode == SyncMode.incremental:
                 logger.info(f"syncing stream '{stream_name}' with incremental")
                 if stream_name not in state:
                     state[stream_name] = {}
 
-                cursor_field = stream.cursor_field[0]
+                cursor_field = configured_stream.cursor_field[0]
                 cursor_value = state[stream_name].get(cursor_field, None)
-                
 
             else:
                 logger.error(
-                    f"could not sync stream '{stream.stream.name}', invalid sync_mode: {stream.sync_mode}")
+                    f"could not sync stream '{configured_stream.stream.name}', invalid sync_mode: {configured_stream.sync_mode}")
 
-            records = client.get_app_records(app["appId"], cursor_value)
+            records = client.get_app_records(app["appId"], cursor_field, cursor_value)
             for record in records:
                 cursor_value = record.get(cursor_field, cursor_value)
                 yield AirbyteMessage(

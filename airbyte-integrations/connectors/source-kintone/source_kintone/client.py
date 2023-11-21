@@ -7,6 +7,7 @@ from airbyte_cdk.models import (
     AirbyteStream,
 )
 
+
 class Client:
     def __init__(self, config: json, logger: AirbyteLogger):
         self.subdomain = config.get("subdomain")
@@ -20,7 +21,7 @@ class Client:
         return {
             "X-Cybozu-API-Token": self.api_token,
         }
-
+    
     def _fetch_data(self, url: str, params: dict, use_json: bool = False):
         headers = self._get_base_header()
         if use_json:
@@ -81,19 +82,19 @@ class Client:
         return {x: fields[x] for x in fields if x not in without_fields}
 
     # ref. https://kintone.dev/en/docs/kintone/rest-api/records/add-cursor/
-    def create_cursor(self, app_id: str, till: str = None):
+    def create_cursor(self, app_id: str, cursor_field: str = None, cursor_value: str = None):
         params = {
             "app": app_id,
             "size": 500,
         }
         # https://cybozu.dev/ja/kintone/docs/overview/query/
-        if till:
-            params["query"] = f"updated_at > \"{till}\""
+        if cursor_field and cursor_value:
+            params["query"] = f"{cursor_field} > \"{cursor_value}\""
         url = self._get_base_url() + "/k/v1/records/cursor.json"
         return self._post_data(url, params)
 
-    def get_app_records(self, app_id: str, till: str = None):
-        cursor = self.create_cursor(app_id, till)
+    def get_app_records(self, app_id: str, cursor_field: str = None, cursor_value: str = None):
+        cursor = self.create_cursor(app_id, cursor_field, cursor_value)
         while True:
             records, next = self.get_records_by_cursor(cursor["id"])
             for record in records:
@@ -131,7 +132,7 @@ class Client:
     def get_stream(self, app_id: str):
         app = self.get_app(app_id)
         # https://jp.cybozu.help/k/en/user/app_settings/app_othersettings/appcode.html
-        if app.get('code') == None:
+        if not app.get('code'):
             return None
 
         json_schema = {
@@ -141,7 +142,7 @@ class Client:
         }
 
         fields = self.get_app_fields(app_id)
-        for k, v in fields.items():
+        for k, _ in fields.items():
             # TODO: Implement more accurate type casting
             # https://kintone.dev/en/docs/kintone/overview/field-types/
             json_schema["properties"][k] = {"type": "string"}
@@ -150,7 +151,6 @@ class Client:
             name=app["code"],
             json_schema=json_schema,
             supported_sync_modes=["full_refresh", "incremental"],
-            source_defined_primary_key=[["record_no"]],
             default_cursor_field=["updated_at"],
         )
 
